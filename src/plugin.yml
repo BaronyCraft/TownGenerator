@@ -1,0 +1,4 @@
+name: TownGenerator
+main: de.guntram.bukkit.towngenerator.Main
+version: "0.1"
+
