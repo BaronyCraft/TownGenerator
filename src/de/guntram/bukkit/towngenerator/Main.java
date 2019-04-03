@@ -5,6 +5,7 @@
  */
 package de.guntram.bukkit.towngenerator;
 
+import org.bukkit.Bukkit;
 import org.bukkit.generator.ChunkGenerator;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -13,9 +14,15 @@ import org.bukkit.plugin.java.JavaPlugin;
  * @author gbl
  */
 public class Main extends JavaPlugin {
+    
+    @Override
+    public void onEnable() {
+        saveDefaultConfig();
+    }
+
     @Override
     public ChunkGenerator getDefaultWorldGenerator(String worldName, String id)
     {
-        return new TownGenerator();
+        return new TownGenerator(this, worldName);
     }
 }

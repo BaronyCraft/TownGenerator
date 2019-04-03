@@ -1,0 +1,8 @@
+worlds:
+    default:
+        plotsize: 60
+        streetwidth: 6
+    town:
+        plotsize: 96
+        streetwidth: 8
+        islandssize: 40

@@ -6,9 +6,14 @@
 package de.guntram.bukkit.towngenerator;
 
 import java.util.Random;
+import org.bukkit.Bukkit;
 import org.bukkit.generator.ChunkGenerator;
 import org.bukkit.Material;
+import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.block.Biome;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.plugin.java.JavaPlugin;
 
 /**
  *
@@ -16,53 +21,98 @@ import org.bukkit.World;
  */
 public class TownGenerator extends ChunkGenerator {
     
-    static final int PLOTSIZE=96;
-    static final int STREETWIDTH=8;
+    final int plotsize;
+    final int streetwidth;
+    final int islandsSize;
 
+    OpenSimplexNoise noiseGenerator;
+
+    TownGenerator(JavaPlugin plugin, String worldName) {
+        
+        System.out.println("creating towngenerator, world="+worldName);
+        World world=Bukkit.getWorld(worldName);
+        System.out.println("new TownGenerator for "+worldName+", getWorld is "+world);
+        if (world!=null) {
+            noiseGenerator=new OpenSimplexNoise(world.getSeed());
+        }
+        FileConfiguration config = plugin.getConfig();
+        
+        plotsize=config.getInt("worlds."+worldName+".plotsize",
+                    config.getInt("worlds.default.plotsize", 60));
+        streetwidth=config.getInt("worlds."+worldName+".streetwidth",
+                    config.getInt("worlds.default.streetwidth", 6));
+        islandsSize=config.getInt("worlds."+worldName+".islandssize",
+                    config.getInt("worlds.default.islandssize", 0));
+    }
+
+    // for 1.13
     @Override
-    public byte[][] generateBlockSections(World world, Random random, int chunkX, int chunkZ, BiomeGrid biomeGrid)
-    {
-        byte[][] result = new byte[world.getMaxHeight() / 16][]; //world height / chunk part height (=16, look above)
-
-        int x, y, z;
+    public ChunkData generateChunkData(World world, Random random, int chunkX, int chunkZ, BiomeGrid biome) {
+        
+        if (noiseGenerator == null) {
+            noiseGenerator=new OpenSimplexNoise(world.getSeed());
+        }
+        
+        ChunkData result=this.createChunkData(world);
+        int x, z;
+        result.setRegion(0, 0, 0, 16, 0, 16, Material.BEDROCK);
+        result.setRegion(0, 1, 0, 16, 20, 16, Material.STONE);
+        result.setRegion(0, 20, 0, 16, 63, 16, Material.DIRT);
         for(x = 0; x < 16; x++) {
             for(z = 0; z < 16; z++) {
-                setBlock(result, x, 0, z, (byte)Material.BEDROCK.getId());
-                for (y=1; y<=20; y++) {
-                    setBlock(result, x, y, z, (byte)Material.STONE.getId());
-                }
-                for (y=21; y<63; y++) {
-                    setBlock(result, x, y, z, (byte)Material.DIRT.getId());
-                }
+                biome.setBiome(x, z, Biome.FLOWER_FOREST);
                 int realX=(chunkX<<4)+x;
                 int realZ=(chunkZ<<4)+z;
-                int plotX=((realX%PLOTSIZE)+PLOTSIZE)%PLOTSIZE;
-                int plotZ=((realZ%PLOTSIZE)+PLOTSIZE)%PLOTSIZE;
-
-                int streetX=plotX-(PLOTSIZE-STREETWIDTH)/2;
-                int streetZ=plotZ-(PLOTSIZE-STREETWIDTH)/2;
+                int plotX=((realX%plotsize)+plotsize)%plotsize;
+                int plotZ=((realZ%plotsize)+plotsize)%plotsize;
                 
-                int block=Material.GRASS.getId();
-                if (plotX >= (PLOTSIZE-STREETWIDTH)/2
-                &&  plotX <  (PLOTSIZE+STREETWIDTH)/2
-                ||  plotZ >= (PLOTSIZE-STREETWIDTH)/2
-                &&  plotZ <  (PLOTSIZE+STREETWIDTH)/2)
-                    block=Material.CLAY.getId();
-                setBlock(result, x, 63, z, (byte)(block&0xff));
+                
+                if (islandsSize != 0
+                &&  realX >= -plotsize*3/2+streetwidth/2
+                &&  realZ >= -plotsize*3/2+streetwidth/2
+                &&  realX <   plotsize*3/2-streetwidth/2
+                &&  realZ <   plotsize*3/2-streetwidth/2) {
+
+                    biome.setBiome(x, z, Biome.WARM_OCEAN);
+                    int maxdy;
+                    int distleft = realX+1-(-plotsize*3/2+streetwidth/2); maxdy=distleft;
+                    int disttop  = realZ+1-(-plotsize*3/2+streetwidth/2); if (disttop < maxdy) maxdy=disttop;
+                    int distright= plotsize*3/2-streetwidth/2-realX;    if (distright < maxdy) maxdy=distright;
+                    int distbot  = plotsize*3/2-streetwidth/2-realZ;    if (distbot   < maxdy) maxdy=distbot;
+                    
+                    double noise=   noiseGenerator.eval((double)realX/islandsSize  , (double)realZ/islandsSize  ) * 0.6+
+                                    noiseGenerator.eval((double)realX/islandsSize/2, (double)realZ/islandsSize/2) * 0.3+ 
+                                    noiseGenerator.eval((double)realX/islandsSize/5, (double)realZ/islandsSize/5) * 0.1+
+                                    0.0;
+                            
+                    int sandy=53+(int)(20*((noise+1)/2));
+                    if (sandy < 64-maxdy) sandy=64-maxdy;
+                    if (sandy > 64+maxdy) sandy=64+maxdy;
+                    int y=50;
+                    while (y<sandy) {
+                        result.setBlock(x, y++, z, Material.SAND);
+                    }
+                    while (y<64) {
+                        result.setBlock(x, y++, z, Material.WATER);
+                    }
+                } else {
+                    int streetX=plotX-(plotsize-streetwidth)/2;
+                    int streetZ=plotZ-(plotsize-streetwidth)/2;
+
+                    Material block=Material.GRASS;
+                    if (plotX >= (plotsize-streetwidth)/2
+                    &&  plotX <  (plotsize+streetwidth)/2
+                    ||  plotZ >= (plotsize-streetwidth)/2
+                    &&  plotZ <  (plotsize+streetwidth)/2)
+                        block=Material.CLAY;
+                    result.setBlock(x, 63, z, block);
+                }
             }
-        }        
-        
-        
+        }
         return result;
     }
     
-    void setBlock(byte[][] result, int x, int y, int z, byte blkid) {
-        // is this chunk part already initialized?
-        if (result[y >> 4] == null) {
-            // Initialize the chunk part
-            result[y >> 4] = new byte[4096];
-        }
-        // set the block (look above, how this is done)
-        result[y >> 4][((y & 0xF) << 8) | (z << 4) | x] = blkid;
-    }    
+    public Location getFixedSpawLocation(World world, Random random) {
+        return new Location(world, 0, 64, 0);
+    }
 }
