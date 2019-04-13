@@ -5,6 +5,8 @@
  */
 package de.guntram.bukkit.towngenerator;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 import org.bukkit.Bukkit;
 import org.bukkit.generator.ChunkGenerator;
@@ -24,15 +26,21 @@ public class TownGenerator extends ChunkGenerator {
     final int plotsize;
     final int streetwidth;
     final int islandsSize;
+    static JavaPlugin plugin;
+    static Map<String, TownGenerator> knownGenerators;
 
     OpenSimplexNoise noiseGenerator;
 
     TownGenerator(JavaPlugin plugin, String worldName) {
         
-        System.out.println("creating towngenerator, world="+worldName);
+        TownGenerator.plugin=plugin;
+        if (knownGenerators == null) {
+            knownGenerators = new HashMap<>();
+        }
         World world=Bukkit.getWorld(worldName);
-        System.out.println("new TownGenerator for "+worldName+", getWorld is "+world);
         if (world!=null) {
+            System.out.println("saving generator for "+worldName);
+            knownGenerators.put(worldName, this);
             noiseGenerator=new OpenSimplexNoise(world.getSeed());
         }
         FileConfiguration config = plugin.getConfig();
@@ -44,7 +52,7 @@ public class TownGenerator extends ChunkGenerator {
         islandsSize=config.getInt("worlds."+worldName+".islandssize",
                     config.getInt("worlds.default.islandssize", 0));
     }
-
+    
     // for 1.13
     @Override
     public ChunkData generateChunkData(World world, Random random, int chunkX, int chunkZ, BiomeGrid biome) {
@@ -112,7 +120,74 @@ public class TownGenerator extends ChunkGenerator {
         return result;
     }
     
-    public Location getFixedSpawLocation(World world, Random random) {
+    @Override
+    public Location getFixedSpawnLocation(World world, Random random) {
         return new Location(world, 0, 64, 0);
     }
+    
+    private static boolean isStreet(int pos, int plotsize, int streetwidth) {
+        int shiftPos = pos + plotsize/2;
+        int plotCoord = Math.floorDiv(shiftPos, plotsize);
+        int plotPos = shiftPos - plotCoord*plotsize;
+        boolean result= (plotPos<streetwidth/2 || plotPos >= plotsize-streetwidth/2);
+        // System.out.printf("isStreet(%d) : shifted %d plotcoord %d plotpos %d =>  %s\n", pos, shiftPos, plotCoord, plotPos, result);
+        return result;
+    }
+
+    private static int getTopOrLeft(int pos, int plotsize, int streetwidth) {
+        int shiftPos = pos + plotsize/2;
+        int plotCoord = Math.floorDiv(shiftPos, plotsize);
+        int result=plotCoord*plotsize + streetwidth/2 - plotsize/2;
+        // System.out.printf("getLower(%d) : shifted %d plotcoord %d %d\n", pos, shiftPos, plotCoord, result);        
+        return result;
+    }
+
+    private static int getBottomOrRight(int pos, int plotsize, int streetwidth) {
+        int shiftPos = pos + plotsize/2;
+        int plotCoord = Math.floorDiv(shiftPos, plotsize);
+        int result=plotCoord*plotsize - streetwidth/2 + plotsize/2 -1;
+        // System.out.printf("getLower(%d) : shifted %d plotcoord %d %d\n", pos, shiftPos, plotCoord, result);        
+        return result;
+    }
+
+    public static Location getNorthWest(Location l) {
+        try {
+            System.out.println("getNW for "+l);
+            TownGenerator gen=knownGenerators.get(l.getWorld().getName());
+            if (isStreet(l.getBlockX(), gen.plotsize, gen.streetwidth)
+            ||  isStreet(l.getBlockZ(), gen.plotsize, gen.streetwidth)) {
+                return null;
+            }
+            int xpos=getTopOrLeft(l.getBlockX(), gen.plotsize, gen.streetwidth);
+            int zpos=getTopOrLeft(l.getBlockZ(), gen.plotsize, gen.streetwidth);
+            Location result=new Location(l.getWorld(), xpos, 0, zpos);
+            System.out.println("NorthWest corner for "+l+" is "+result);
+            return result;
+        } catch (NullPointerException ex) {
+            System.out.println(ex);
+            System.out.println(ex.getStackTrace());
+            return null;
+        }
+    }
+    
+    public static Location getSouthEast(Location l) {
+        try {
+            System.out.println("getSE for "+l);
+            TownGenerator gen=knownGenerators.get(l.getWorld().getName());
+            if (isStreet(l.getBlockX(), gen.plotsize, gen.streetwidth)
+            ||  isStreet(l.getBlockZ(), gen.plotsize, gen.streetwidth)) {
+                return null;
+            }
+            int xpos=getBottomOrRight(l.getBlockX(), gen.plotsize, gen.streetwidth);
+            int zpos=getBottomOrRight(l.getBlockZ(), gen.plotsize, gen.streetwidth);
+            Location result=new Location(l.getWorld(), xpos, 0, zpos);
+            System.out.println("SouthEast corner for "+l+" is "+result);
+            return result;
+        } catch (NullPointerException ex) {
+            System.out.println(ex);
+            System.out.println(ex.getStackTrace());
+            return null;
+        }
+    }
+    
 }
